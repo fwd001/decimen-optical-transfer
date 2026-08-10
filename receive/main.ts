@@ -40,6 +40,7 @@ import { requestScreenWakeLock } from "../shared/wake-lock";
 import { applyAdvancedConstraint, probeCameraCapabilities } from "../shared/platform";
 import { closeOnBackdropClick } from "../shared/dialog";
 import { supportLink } from "./support";
+import { loadConfig, saveConfig } from "../shared/config-loader";
 
 const startBtn = document.getElementById("start") as HTMLButtonElement;
 const video = document.getElementById("video") as HTMLVideoElement;
@@ -353,6 +354,23 @@ cfgWorkers.value = String(
   Math.max(...Array.from(cfgWorkers.options, (option) => Number(option.value))),
 );
 
+// Load persisted settings (localStorage > JSON file > HTML defaults).
+// After hardware pruning so the valid option set is already narrowed.
+loadConfig().then((rxConfig) => {
+  cfgWidth.value = String(rxConfig.receive.width);
+  cfgCapFps.value = String(rxConfig.receive.capfps);
+  if (rxConfig.receive.workers != null) {
+    const validWorkerOptions = Array.from(cfgWorkers.options, (o) => Number(o.value));
+    if (validWorkerOptions.includes(rxConfig.receive.workers)) {
+      cfgWorkers.value = String(rxConfig.receive.workers);
+    }
+  }
+});
+// Persist every setting change to localStorage.
+cfgWidth.addEventListener("change", () => saveConfig("receive", "width", Number(cfgWidth.value)));
+cfgCapFps.addEventListener("change", () => saveConfig("receive", "capfps", Number(cfgCapFps.value)));
+cfgWorkers.addEventListener("change", () => saveConfig("receive", "workers", Number(cfgWorkers.value)));
+
 const { setStatus, showError } = statusLine(stats);
 
 // The toast asks one question; the answers live in the dialog. The tip list is
@@ -410,6 +428,54 @@ function offerRetry(message: string) {
   showError(message);
 }
 
+/** Find the main wide-angle back camera from the device list.
+ *
+ *  Multi-camera Android phones (OnePlus, Samsung, Pixel) expose several back
+ *  cameras; `facingMode: "environment"` picks one arbitrarily — often the
+ *  telephoto. The main camera is usually device 0 or has "back" in its label
+ *  without telephoto/ultrawide qualifiers. */
+async function findMainBackCamera(): Promise<string | undefined> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videos = devices.filter((d) => d.kind === "videoinput");
+    if (videos.length <= 1) return undefined; // single camera — nothing to choose
+
+    // Look for the main back camera by label heuristics.
+    // Android camera2 API labels: "0" = main back, "1" = front, "2" = ultrawide, etc.
+    // Some OEMs use descriptive labels like "back camera" or "rear camera".
+    const isTelephoto = (l: string) => /tele|zoom|x\s*2|2x/i.test(l);
+    const isUltrawide = (l: string) => /ultra|wide\s*angle|0\.6|\.5x/i.test(l);
+    const isFront = (l: string) => /front|user|selfie/i.test(l);
+
+    // Prefer the device whose label looks like the main back camera.
+    const candidates = videos.filter((d) => {
+      const label = d.label;
+      if (!label) return true; // unlabeled — might be the one we want
+      if (isFront(label) || isTelephoto(label) || isUltrawide(label)) return false;
+      return true;
+    });
+
+    if (candidates.length === 1) return candidates[0]!.deviceId;
+    if (candidates.length > 1) {
+      // Among survivors, prefer the one with the lowest numeric device ID
+      // (camera2 API convention: device "0" is the main sensor).
+      const byId = candidates
+        .map((d) => {
+          const m = d.label.match(/^(\d+)/);
+          return { device: d, num: m ? parseInt(m[1]!, 10) : Infinity };
+        })
+        .sort((a, b) => a.num - b.num);
+      return byId[0]!.device.deviceId;
+    }
+
+    // All labeled devices were filtered out — fall back to the first unlabeled one.
+    const unlabeled = videos.find((d) => !d.label);
+    return unlabeled?.deviceId;
+  } catch {
+    return undefined; // enumerateDevices can throw on some browsers
+  }
+}
+
 async function start() {
   if (!navigator.mediaDevices?.getUserMedia) {
     // On insecure origins the API doesn't exist AT ALL — this is the plain-
@@ -426,6 +492,8 @@ async function start() {
   // error paths below all have to leave a usable Start button behind.
   startBtn.disabled = true;
   startBtn.textContent = "Starting…";
+
+  // Step 1: get initial permission with facingMode to unlock device labels.
   const base: MediaTrackConstraints = {
     facingMode: "environment",
     width: { ideal: captureWidth },
@@ -451,6 +519,46 @@ async function start() {
         : `camera: ${err instanceof Error ? err.message : String(err)}`,
     );
     return;
+  }
+
+  // Step 2: now that labels are available, find the main wide-angle camera.
+  // If it's a different device than what we just got, re-acquire with deviceId.
+  const mainCamId = await findMainBackCamera();
+  if (mainCamId) {
+    const currentTrack = stream.getVideoTracks()[0];
+    if (currentTrack && currentTrack.getSettings().deviceId !== mainCamId) {
+      // Switch to the main wide-angle camera.
+      stream.getTracks().forEach((t) => t.stop());
+      const deviceIdBase: MediaTrackConstraints = {
+        deviceId: { exact: mainCamId },
+        width: { ideal: captureWidth },
+        height: { ideal: Math.round((captureWidth * 3) / 4) },
+      };
+      try {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { ...deviceIdBase, frameRate: { exact: captureFps } },
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { ...deviceIdBase, frameRate: { ideal: captureFps } },
+          });
+        }
+      } catch {
+        // Device switch failed — re-acquire with the original facingMode fallback.
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { ...base, frameRate: { ideal: captureFps } },
+          });
+        } catch {
+          offerRetry("camera failed — could not switch to the main wide-angle lens.");
+          return;
+        }
+      }
+    }
   }
 
   startBtn.style.display = "none";

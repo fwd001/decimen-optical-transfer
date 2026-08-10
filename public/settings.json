@@ -1,0 +1,13 @@
+{
+  "send": {
+    "fps": 60,
+    "bytes": 2953,
+    "ecc": "L",
+    "grid": 1,
+    "size": 900
+  },
+  "receive": {
+    "width": 1280,
+    "capfps": 60
+  }
+}

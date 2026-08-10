@@ -111,6 +111,9 @@
         <a href="https://github.com/bashalarmistalt/decimen-optical-transfer/releases">Releases</a>
       </nav>
     </footer>
+    <!-- Fetch default settings into localStorage before the module loads.
+         Absolute path from origin so it works from /send/ and /receive/. -->
+    <script>void fetch(location.protocol+"//"+location.host+"/settings.json",{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d)return;var K="decimen-settings",c={};try{c=JSON.parse(localStorage.getItem(K)||"{}")}catch(e){}if(d.send)c.send=Object.assign({},d.send,c.send);if(d.receive)c.receive=Object.assign({},d.receive,c.receive);try{localStorage.setItem(K,JSON.stringify(c))}catch(e){}})</script>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

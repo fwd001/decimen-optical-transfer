@@ -38,6 +38,7 @@ import {
 import { statusLine } from "../shared/status-line";
 import { requestScreenWakeLock } from "../shared/wake-lock";
 import { wireShareDialog } from "../shared/share-dialog";
+import { loadConfig, saveConfig } from "../shared/config-loader";
 
 const MARGIN = 4; // quiet-zone modules
 const LOOKAHEAD = 3;
@@ -308,6 +309,19 @@ async function main() {
   for (const el of [cfgFps, cfgBytes, cfgEcc, cfgGrid, cfgSize]) {
     el.addEventListener("change", () => void startStream());
   }
+  // Load persisted settings (localStorage > JSON file > HTML defaults).
+  const config = await loadConfig();
+  cfgFps.value = String(config.send.fps);
+  cfgBytes.value = String(config.send.bytes);
+  cfgEcc.value = config.send.ecc;
+  cfgGrid.value = String(config.send.grid);
+  cfgSize.value = String(config.send.size);
+  // Persist every setting change to localStorage.
+  cfgFps.addEventListener("change", () => saveConfig("send", "fps", Number(cfgFps.value)));
+  cfgBytes.addEventListener("change", () => saveConfig("send", "bytes", Number(cfgBytes.value)));
+  cfgEcc.addEventListener("change", () => saveConfig("send", "ecc", cfgEcc.value));
+  cfgGrid.addEventListener("change", () => saveConfig("send", "grid", Number(cfgGrid.value)));
+  cfgSize.addEventListener("change", () => saveConfig("send", "size", Number(cfgSize.value)));
   await requestScreenWakeLock();
 }
 
