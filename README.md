@@ -14,6 +14,12 @@ Open it on both devices and go — nothing to install. Works offline after the
 first visit, and installs as an app on both iOS and Android if you want it on
 a home screen.
 
+**This fork's live build** — every push to `main` is built and published to
+GitHub Pages by [`.github/workflows/pages.yml`](.github/workflows/pages.yml),
+so the latest `main` is always live here:
+
+### **→ [fwd001.github.io/decimen-optical-transfer](https://fwd001.github.io/decimen-optical-transfer/)**
+
 Files up to 64 MB (or a pasted text snippet), filename and media type
 preserved, gzip only when it helps, SHA-256 verified before anything is
 offered — and received video plays right in the page. Currently measured at
