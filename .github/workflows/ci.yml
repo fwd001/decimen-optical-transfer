@@ -26,7 +26,9 @@ jobs:
       - run: npm test
       - run: npm run build:all
       # A regression here means the inlined worker or wasm leaked into the
-      # served bundle — see build/use-inline-variants.ts.
+      # served bundle — see build/use-inline-variants.ts. The threshold sits
+      # above this fork's settings-loader baseline (~20 KB receive chunk) but
+      # far below what an inlined 29 KB worker or 277 KB wasm would add.
       - name: Served receive chunk stays small
         run: |
           shopt -s nullglob
@@ -40,7 +42,7 @@ jobs:
           fi
           bytes=$(stat -c%s "${chunks[0]}")
           echo "receive chunk: ${chunks[0]} — $bytes bytes"
-          test "$bytes" -lt 20000
+          test "$bytes" -lt 25000
 
       # rootPwaHead() in build/root-pwa-head.ts already asserts this at build
       # time, but only against the HTML it rewrote. This checks the files on disk
