@@ -1186,7 +1186,12 @@ function showNoSignalHint() {
 
 /** Nothing is persisted: the text lives here until the page is closed. The
  *  summary line mirrors the file path — run stats under the heading, not up
- *  in the camera status line. */
+ *  in the camera status line.
+ *
+ *  The Copy button sits ABOVE the snippet body, not under it: a received
+ *  snippet can be arbitrarily long, and the whole point of the text result
+ *  is to take it somewhere else — burying the one action everyone wants
+ *  behind a wall of text just means a scroll to the bottom to copy. */
 function showSnippet(text: string, summaryLine: string) {
   const heading = document.createElement("div");
   heading.className = "done";
@@ -1196,12 +1201,8 @@ function showSnippet(text: string, summaryLine: string) {
   summary.className = "hint";
   summary.textContent = summaryLine;
 
-  const body = document.createElement("p");
-  body.className = "received-note";
-  body.textContent = text;
-
-  const actions = document.createElement("div");
-  actions.className = "note-actions";
+  const copyActions = document.createElement("div");
+  copyActions.className = "note-actions";
   const copy = document.createElement("button");
   copy.type = "button";
   copy.className = "text-button";
@@ -1215,9 +1216,19 @@ function showSnippet(text: string, summaryLine: string) {
       copy.textContent = "Copy failed";
     }
   });
-  actions.append(copy, restartButton("Receive another file"));
+  copyActions.append(copy);
 
-  result.replaceChildren(heading, summary, body, actions);
+  const body = document.createElement("p");
+  body.className = "received-note";
+  body.textContent = text;
+
+  // "Receive another file" keeps its natural spot at the end of the result,
+  // mirroring the file-transfer layout below.
+  const endActions = document.createElement("div");
+  endActions.className = "note-actions pair";
+  endActions.append(restartButton("Receive another file"));
+
+  result.replaceChildren(heading, summary, copyActions, body, endActions);
 }
 
 function updateStats() {
